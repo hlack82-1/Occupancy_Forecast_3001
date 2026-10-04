@@ -1,0 +1,13 @@
+name: mma3001
+channels: [conda-forge]
+dependencies:
+  - python=3.12
+  - numpy
+  - pandas
+  - pyarrow
+  - scikit-learn
+  - matplotlib
+  - pytest
+  - pytest-html
+  - pdoc
+  - jupyter
