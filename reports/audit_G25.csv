@@ -1,0 +1,17 @@
+,value
+rows,1500394
+first_timestamp,2024-03-03 15:06:30+11:00
+last_timestamp,2026-04-22 22:09:42+10:00
+duplicate_timestamps,3
+unknown_status,0
+negative_headcount,0
+status_headcount_mismatch,0
+max_headcount,38
+gaps_over_limit,1755
+gaps_over_limit_after_empty,1702
+likely_dropouts,53
+zero_blips_under_1min,36824
+longest_gap_hours,26.199444444444445
+days,781
+quiet_days,20
+night_share_occupied,0.218
