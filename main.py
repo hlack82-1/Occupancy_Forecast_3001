@@ -6,11 +6,16 @@ Usage (from the repository root, with the mma3001 environment active)::
 
 Each stage is added here as it is built. Outputs:
 
-- ``reports/audit_<room>.csv``: data-quality counts for the report
+- ``reports/audit_<room>.csv``: data-quality counts
 - ``data/processed/<room>_15min.parquet``: clean headcount series (not committed)
+- ``reports/baseline_results.csv``: baseline scores on the whole test period
+- ``reports/baseline_results_by_period.csv``: the same, split by year and
+  academic period
 """
 
 from pathlib import Path
+
+import pandas as pd
 
 from occupancy.data import (
     FLOORSPACES,
@@ -19,6 +24,15 @@ from occupancy.data import (
     load_occupancy_events,
     remove_duplicates,
     to_regular_grid,
+)
+from occupancy.evaluate import score_table
+from occupancy.features import PERIODS, make_features, split_by_date
+from occupancy.models import (
+    fit_weekly_profile,
+    forecast_empty,
+    forecast_fixed_profile,
+    forecast_last_week,
+    forecast_rolling_profile,
 )
 
 RAW_OCCUPANCY = Path("data/raw/5occupancySensor_MayToDec2024_9MRows.csv")
@@ -29,24 +43,19 @@ ROOM = "G25"
 FREQ = "15min"          # grid block length
 DROPOUT_LIMIT = "1h"    # longest a non-zero reading is trusted without a new one
 AGG = "mean"            # time-weighted average headcount per block
+TEST_START = "2025-03-03"  # train on the first 12 months, test on the rest
 
 
-def main():
-    """Run each pipeline stage in order and print a short summary."""
-    PROCESSED.mkdir(parents=True, exist_ok=True)
-    REPORTS.mkdir(exist_ok=True)
-
-    # 1. Load raw events for one room
+def build_clean_series():
+    """Stage 1: load, audit, clean and resample. Returns the 15-minute series."""
     events = load_occupancy_events(RAW_OCCUPANCY, FLOORSPACES[ROOM])
     print(f"Loaded {len(events):,} raw events for {ROOM}")
 
-    # 2. Audit before changing anything
     audit = audit_events(events, dropout_limit=DROPOUT_LIMIT)
     audit.to_csv(REPORTS / f"audit_{ROOM}.csv", header=["value"])
     print("\nData audit:")
     print(audit.to_string())
 
-    # 3. Clean and convert to a regular grid
     events, n_dupes = remove_duplicates(events)
     series = to_regular_grid(events, freq=FREQ, dropout_limit=DROPOUT_LIMIT, agg=AGG)
     series = drop_partial_days(series)
@@ -55,6 +64,50 @@ def main():
     print(f"\nRemoved {n_dupes} duplicate rows")
     print(f"Saved {len(series):,} {FREQ} blocks to {out_path}")
     print(f"From {series.index.min()} to {series.index.max()}")
+    return series
+
+
+def run_baselines(series):
+    """Stage 2: features, date split and baseline forecasts. Returns the scores."""
+    table = make_features(series)
+    train, test = split_by_date(table, TEST_START)
+    print(f"\nTrain: {train.index.min().date()} to {train.index.max().date()} "
+          f"({len(train):,} blocks)")
+    print(f"Test:  {test.index.min().date()} to {test.index.max().date()} "
+          f"({len(test):,} blocks)")
+
+    forecasts = {
+        "always_empty": forecast_empty(test),
+        "last_week": forecast_last_week(test),
+        "fixed_profile": forecast_fixed_profile(fit_weekly_profile(train), test),
+        "rolling_profile": forecast_rolling_profile(test),
+    }
+    results = score_table(test["headcount"], forecasts)
+    results.to_csv(REPORTS / "baseline_results.csv")
+
+    # Same scores split by year and by academic period
+    period = test[[f"period_{p}" for p in PERIODS]].idxmax(axis=1).str[len("period_"):]
+    groups = {f"year_{y}": test.index.year == y for y in sorted(set(test.index.year))}
+    groups.update({f"period_{p}": (period == p).to_numpy() for p in PERIODS})
+    parts = []
+    for name, mask in groups.items():
+        part = score_table(test["headcount"][mask],
+                           {k: v[mask] for k, v in forecasts.items()})
+        parts.append(part.assign(group=name))
+    pd.concat(parts).rename_axis("method").reset_index().to_csv(
+        REPORTS / "baseline_results_by_period.csv", index=False)
+
+    print("\nBaseline results on the test period:")
+    print(results.round(3).to_string())
+    return results
+
+
+def main():
+    """Run each pipeline stage in order and print a short summary."""
+    PROCESSED.mkdir(parents=True, exist_ok=True)
+    REPORTS.mkdir(exist_ok=True)
+    series = build_clean_series()
+    run_baselines(series)
 
 
 if __name__ == "__main__":
