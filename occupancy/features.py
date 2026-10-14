@@ -148,6 +148,9 @@ def make_features(series):
 
         - ``headcount``: the target (actual people, time-weighted average)
         - ``block``: position in the day, 0 to 95
+        - ``block_sin``, ``block_cos``: time of day as a point on a circle,
+          so 23:45 and 00:00 come out close together (used by the linear
+          model and neural network, which can't see that ``block`` wraps)
         - ``weekday``: 0 = Monday to 6 = Sunday
         - ``is_weekend``, ``is_holiday``: 0 or 1
         - ``period_<name>``: one 0/1 column per entry in ``PERIODS``
@@ -180,6 +183,9 @@ def make_features(series):
     table = pd.DataFrame(index=series.index)
     table["headcount"] = series.to_numpy()
     table["block"] = blocks
+    angle = 2 * np.pi * blocks / BLOCKS_PER_DAY
+    table["block_sin"] = np.sin(angle)
+    table["block_cos"] = np.cos(angle)
     table["weekday"] = local.dayofweek
     table["is_weekend"] = (local.dayofweek >= 5).astype(int)
     table["is_holiday"] = np.isin(days, list(PUBLIC_HOLIDAYS)).astype(int)
