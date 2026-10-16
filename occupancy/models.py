@@ -16,11 +16,14 @@ real method, but it is a sanity check: because the room is often empty, a
 method has to beat it clearly on error to be worth anything.
 
 Then three machine-learning models (linear regression, decision tree,
-neural network), described further down.
+neural network), described further down, and a monthly-retraining
+version of them that keeps up as room use changes.
 
 All forecasts are day-ahead: they only use data up to the end of the day
 before the day being forecast (see ``occupancy.features``).
 """
+
+import time
 
 import numpy as np
 import pandas as pd
@@ -296,3 +299,59 @@ CANDIDATES = {
         "mlp_64_32_alpha0.01": {"hidden_layers": (64, 32), "alpha": 1e-2},
     },
 }
+
+
+def forecast_monthly_retrain(kind, table, test_start, **settings):
+    """Forecast the test period, retraining the model at the start of each month.
+
+    Concept: room use changes over time (it dropped sharply after 2024), so a
+    model trained once on old data drifts out of date. Here the model is
+    retrained before every calendar month on **all data before that month**
+    (an expanding window), then used to forecast that month day-ahead. This is
+    what a building would do in practice: refresh the model regularly.
+
+    No future data leaks in: the model for a month never sees that month or
+    anything after it.
+
+    Parameters
+    ----------
+    kind : {"linear", "tree", "mlp"}
+    table : pandas.DataFrame
+        The full feature table (training and test rows).
+    test_start : str or pandas.Timestamp
+        First local date to forecast.
+    **settings
+        Passed to :func:`build_model`.
+
+    Returns
+    -------
+    forecast : pandas.Series
+        Forecast headcount for every row from ``test_start`` on.
+    train_seconds : float
+        Total time spent training across all months.
+    """
+    tz = table.index.tz
+    start = pd.Timestamp(test_start)
+    start = start.tz_localize(tz) if start.tz is None else start
+    end = table.index.max()
+
+    # Month boundaries: the test start, then the 1st of every later month
+    boundaries = [start] + list(pd.date_range(
+        (start + pd.offsets.MonthBegin(1)).normalize().tz_localize(None),
+        end.tz_localize(None), freq="MS").tz_localize(tz))
+    boundaries.append(end + pd.Timedelta("1ns"))
+
+    parts = []
+    train_seconds = 0.0
+    for month_start, month_end in zip(boundaries[:-1], boundaries[1:]):
+        rows = table[(table.index >= month_start) & (table.index < month_end)]
+        if rows.empty:
+            continue
+        history = table[table.index < month_start]
+        tic = time.perf_counter()
+        model = train_model(kind, history, **settings)
+        train_seconds += time.perf_counter() - tic
+        parts.append(forecast_model(kind, model, rows))
+
+    forecast = pd.concat(parts).rename(f"{kind}_monthly")
+    return forecast, train_seconds

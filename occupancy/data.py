@@ -315,3 +315,27 @@ def drop_partial_days(series):
     dates = series.index.date
     keep = (dates != dates.min()) & (dates != dates.max())
     return series[keep]
+
+
+def zero_overnight(series, start_hour=1, end_hour=5):
+    """Set every block from ``start_hour`` up to ``end_hour`` (local) to 0.
+
+    Used only for the sensitivity check on the assumption that overnight
+    detections are real people. If they are actually sensor false counts,
+    the true overnight headcount would be 0.
+
+    Parameters
+    ----------
+    series : pandas.Series
+        Regular headcount series with a tz-aware local index.
+    start_hour, end_hour : int, optional
+        Hours of the day to clear, start included and end excluded.
+
+    Returns
+    -------
+    pandas.Series
+        A copy with those blocks set to 0.
+    """
+    hours = series.index.hour
+    night = (hours >= start_hour) & (hours < end_hour)
+    return series.where(~night, 0.0)

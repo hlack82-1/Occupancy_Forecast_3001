@@ -2,7 +2,9 @@
 
 Usage (from the repository root, with the mma3001 environment active)::
 
-    python main.py
+    python main.py           # everything (about 15 to 20 minutes)
+    python main.py --quick   # skips monthly retraining of the neural
+                             # network, the slow part (about 2 minutes)
 
 Each stage is added here as it is built. Outputs:
 
@@ -16,8 +18,12 @@ Each stage is added here as it is built. Outputs:
 - ``reports/model_results.csv``: baselines and the three ML models on the
   test period, with training and prediction times
 - ``reports/model_results_by_period.csv``: the same, by year and period
+  (both model tables include the monthly-retrained versions)
+- ``reports/sensitivity_results.csv``: how the results change when each
+  cleaning assumption is changed
 """
 
+import argparse
 import time
 from pathlib import Path
 
@@ -30,6 +36,7 @@ from occupancy.data import (
     load_occupancy_events,
     remove_duplicates,
     to_regular_grid,
+    zero_overnight,
 )
 from occupancy.evaluate import score_table
 from occupancy.features import PERIODS, make_features, split_by_date
@@ -37,6 +44,7 @@ from occupancy.models import (
     CANDIDATES,
     fit_weekly_profile,
     forecast_model,
+    forecast_monthly_retrain,
     train_model,
     forecast_empty,
     forecast_fixed_profile,
@@ -66,7 +74,7 @@ def build_clean_series():
     print("\nData audit:")
     print(audit.to_string())
 
-    events, n_dupes = remove_duplicates(events)
+    events, n_dupes = remove_duplicates(events)  # cleaned events kept for stage 4
     series = to_regular_grid(events, freq=FREQ, dropout_limit=DROPOUT_LIMIT, agg=AGG)
     series = drop_partial_days(series)
     out_path = PROCESSED / f"{ROOM}_{FREQ}.parquet"
@@ -74,7 +82,7 @@ def build_clean_series():
     print(f"\nRemoved {n_dupes} duplicate rows")
     print(f"Saved {len(series):,} {FREQ} blocks to {out_path}")
     print(f"From {series.index.min()} to {series.index.max()}")
-    return series
+    return events, series
 
 
 def run_baselines(series):
@@ -147,9 +155,17 @@ def choose_settings(train):
     return chosen
 
 
-def run_models(train, test, chosen):
-    """Stage 3b: retrain the chosen settings on the whole training year and
-    score them once on the test period, next to the baselines."""
+def run_models(table, train, test, chosen, quick=False):
+    """Stage 3b: score the chosen models on the test period, next to the
+    baselines, in two ways:
+
+    - trained once on the training year (``<name>``)
+    - retrained at the start of every test month on all earlier data
+      (``<name>_monthly``), to keep up with the drop in room use
+
+    With ``quick=True`` the neural network is not retrained monthly (it is
+    by far the slowest part).
+    """
     forecasts = baseline_forecasts(train, test)
     timing = {}
     for kind, (name, settings) in chosen.items():
@@ -160,6 +176,14 @@ def run_models(train, test, chosen):
         forecasts[name] = forecast_model(kind, model, test)
         timing[name] = {"train_seconds": fit_seconds,
                         "predict_seconds": time.perf_counter() - start}
+
+    for kind, (name, settings) in chosen.items():
+        if quick and kind == "mlp":
+            continue
+        print(f"Monthly retraining: {name} ...", flush=True)
+        forecast, seconds = forecast_monthly_retrain(kind, table, TEST_START, **settings)
+        forecasts[f"{name}_monthly"] = forecast.reindex(test.index)
+        timing[f"{name}_monthly"] = {"train_seconds": seconds}
 
     results = score_table(test["headcount"], forecasts)
     results = results.join(pd.DataFrame(timing).T)
@@ -172,15 +196,74 @@ def run_models(train, test, chosen):
     return results
 
 
-def main():
+#: Cleaning assumptions to vary, one at a time, from the main settings.
+SENSITIVITY_CASES = {
+    "main settings (15 min, mean, 1 h dropout)": {},
+    "block value = maximum, not average": {"agg": "max"},
+    "dropout limit 30 min": {"dropout_limit": "30min"},
+    "dropout limit 2 h": {"dropout_limit": "2h"},
+    "overnight (1am to 5am) set to 0": {"zero_nights": True},
+    "hourly blocks instead of 15 min": {"freq": "1h"},
+}
+
+
+def run_sensitivity(events):
+    """Stage 4: change one cleaning assumption at a time and re-score.
+
+    Uses the fast methods only (rolling 4-week profile, linear regression
+    trained once and retrained monthly). Each case changes the target data
+    as well as the inputs, so the question is whether the conclusions hold,
+    not whether one number is lower.
+    """
+    rows = []
+    for case, change in SENSITIVITY_CASES.items():
+        freq = change.get("freq", FREQ)
+        tic = time.perf_counter()
+        series = to_regular_grid(events, freq=freq,
+                                 dropout_limit=change.get("dropout_limit", DROPOUT_LIMIT),
+                                 agg=change.get("agg", AGG))
+        series = drop_partial_days(series)
+        if change.get("zero_nights"):
+            series = zero_overnight(series)
+        grid_seconds = time.perf_counter() - tic
+
+        table = make_features(series)
+        train, test = split_by_date(table, TEST_START)
+        linear_monthly, _ = forecast_monthly_retrain("linear", table, TEST_START)
+        forecasts = {
+            "rolling_profile": forecast_rolling_profile(test),
+            "linear": forecast_model("linear", train_model("linear", train), test),
+            "linear_monthly": linear_monthly.reindex(test.index),
+        }
+        scores = score_table(test["headcount"], forecasts)
+        scores["case"] = case
+        scores["test_mean_headcount"] = test["headcount"].mean()
+        scores["grid_seconds"] = grid_seconds
+        rows.append(scores.rename_axis("method").reset_index())
+        print(f"  done: {case}", flush=True)
+
+    results = pd.concat(rows)
+    results.to_csv(REPORTS / "sensitivity_results.csv", index=False)
+    print("\nSensitivity (MAE by case):")
+    print(results.pivot(index="case", columns="method", values="mae")
+          .reindex(SENSITIVITY_CASES).round(3).to_string())
+    return results
+
+
+def main(quick=False):
     """Run each pipeline stage in order and print a short summary."""
     PROCESSED.mkdir(parents=True, exist_ok=True)
     REPORTS.mkdir(exist_ok=True)
-    series = build_clean_series()
-    _, train, test = run_baselines(series)
+    events, series = build_clean_series()
+    table, train, test = run_baselines(series)
     chosen = choose_settings(train)
-    run_models(train, test, chosen)
+    run_models(table, train, test, chosen, quick=quick)
+    print("\nSensitivity checks:")
+    run_sensitivity(events)
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description="Occupancy forecasting pipeline")
+    parser.add_argument("--quick", action="store_true",
+                        help="skip monthly retraining of the neural network")
+    main(quick=parser.parse_args().quick)

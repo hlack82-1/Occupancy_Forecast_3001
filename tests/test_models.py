@@ -101,3 +101,44 @@ def test_seed_average_is_mean_of_members():
 
     avg = SeedAverage(Constant, seeds=[1, 2, 3]).fit([[0], [0]], [0, 0])
     assert list(avg.predict([[0], [0]])) == [2.0, 2.0]
+
+
+# ---------------------------------------------------------------------------
+# Monthly retraining
+# ---------------------------------------------------------------------------
+from occupancy.models import forecast_monthly_retrain  # noqa: E402
+
+
+def drop_in_use_table():
+    """Busy weekdays at 4 people until mid-July 2024, then 1 person after."""
+    s = daily_pattern_series("2024-05-06", 120, value_for_day=lambda d: 0.0)
+    busy = (s.index.dayofweek < 5) & (s.index.hour >= 9) & (s.index.hour < 17)
+    level = np.where(s.index < pd.Timestamp("2024-07-15", tz=s.index.tz), 4.0, 1.0)
+    s[busy] = level[busy]
+    return make_features(s)
+
+
+def test_monthly_retraining_keeps_up_with_a_drop_in_use():
+    t = drop_in_use_table()
+    train, test = split_by_date(t, "2024-07-01")
+    once = forecast_model("linear", train_model("linear", train), test)
+    monthly, seconds = forecast_monthly_retrain("linear", t, "2024-07-01")
+    late = test.index >= pd.Timestamp("2024-08-15", tz=test.index.tz)
+    err_once = (once[late] - test["headcount"][late]).abs().mean()
+    err_monthly = (monthly[late] - test["headcount"][late]).abs().mean()
+    assert err_monthly < err_once
+    assert seconds > 0
+    assert monthly.index.equals(test.index)
+
+
+def test_monthly_retraining_never_uses_future_data():
+    # Change only the last month's headcounts. Forecasts for earlier months
+    # must not move, because their models were trained before that month.
+    t = drop_in_use_table()
+    changed = t.copy()
+    last_month = changed.index >= pd.Timestamp("2024-08-01", tz=t.index.tz)
+    changed.loc[last_month, "headcount"] = 30.0
+    a, _ = forecast_monthly_retrain("tree", t, "2024-07-01")
+    b, _ = forecast_monthly_retrain("tree", changed, "2024-07-01")
+    july = a.index < pd.Timestamp("2024-08-01", tz=t.index.tz)
+    assert a[july].equals(b[july])

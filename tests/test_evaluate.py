@@ -50,3 +50,11 @@ def test_score_table_uses_common_blocks():
     table = score_table(actual, {"a": make([1, 1, np.nan]), "b": make([2, 2, 2])})
     assert (table["blocks_scored"] == 2).all()
     assert table.loc["a", "mae"] == 0 and table.loc["b", "mae"] == 1
+
+
+def test_supply_uses_block_length_from_data():
+    index = pd.date_range("2024-05-06 09:00", periods=3, freq="1h", tz="Australia/Melbourne")
+    actual = pd.Series([2.0, 2.0, 2.0], index=index)
+    forecast = pd.Series([1.0, 2.0, 2.0], index=index)
+    # 1 person short for one 1-hour block = 1 person-hour
+    assert score(actual, forecast)["under_supply_ph_per_day"] == pytest.approx(1.0)

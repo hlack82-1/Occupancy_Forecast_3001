@@ -1,0 +1,14 @@
+step,variant,seconds,peak_memory_mb,result_mb,file_mb,speedup,max_difference_people,blocks,rows,inputs,est_flops,achieved_gflops,weights,epochs,intensity_flops_per_byte
+load CSV,"chunks of 100,000 rows",14.216864099988015,,28.507794,1605.044297,,,,,,,,,,
+load CSV,"chunks of 1,000,000 rows",13.032626500003971,,28.507794,1605.044297,,,,,,,,,,
+event to 15-min grid,vectorised (pandas),0.3381350999989081,185.672476,,,,,,,,,,,,
+event to 15-min grid,Python loop,1.7141477999975905,28.359222,,,5.06941692833168,0.0,,,,,,,,
+resolution,15min blocks: grid,0.30792900000233203,,,,,,74788.0,,,,,,,
+resolution,15min blocks: features,0.15410570002859458,,,,,,,,,,,,,
+resolution,15min blocks: train linear,0.10098550000111572,,,,,,,34944.0,,,,,,
+resolution,1h blocks: grid,0.28301540002576075,,,,,,18697.0,,,,,,,
+resolution,1h blocks: features,0.03956230002222583,,,,,,,,,,,,,
+resolution,1h blocks: train linear,0.015305200009606779,,,,,,,8736.0,,,,,,
+train,linear regression,0.03830209997249767,,,,,,,34944.0,20.0,27955200.0,0.729860765338529,,,
+train,"neural network (64, 32), 1 seed",7.825136900006328,,,,,,,34944.0,20.0,46387740672.0,5.928042060447848,3457.0,64.0,
+arithmetic intensity,batch 200 x 20 inputs -> 64 neurons,,,,,,,,,,,,,,3.5398230088495577

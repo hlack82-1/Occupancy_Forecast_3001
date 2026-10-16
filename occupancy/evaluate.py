@@ -9,14 +9,19 @@ Two kinds of measure:
   is too high means air is conditioned for people who aren't there (wasted
   energy). Splitting the error this way shows which side a method errs on.
 
-One block is 15 minutes = 0.25 hours, so 1 person missed for one block is
-0.25 person-hours.
+One 15-minute block is 0.25 hours, so 1 person missed for one block is
+0.25 person-hours. The block length is read from the data, so hourly
+blocks work too.
 """
 
 import numpy as np
 import pandas as pd
 
-BLOCK_HOURS = 0.25
+def block_hours(index):
+    """Length of one block in hours, from the most common gap in the index."""
+    if len(index) < 2:
+        return 0.25
+    return pd.Series(index).diff().mode().iloc[0].total_seconds() / 3600
 
 
 def score(actual, forecast):
@@ -60,6 +65,7 @@ def score(actual, forecast):
     a = actual[both].astype(float)
     f = forecast[both].astype(float)
     error = f - a
+    hours = block_hours(actual.index)
 
     days = a.index.date
     n_days = len(set(days))
@@ -70,8 +76,8 @@ def score(actual, forecast):
         "rmse": np.sqrt((error ** 2).mean()),
         "bias": error.mean(),
         "peak_error": daily_peak_gap.mean(),
-        "under_supply_ph_per_day": (-error).clip(lower=0).sum() * BLOCK_HOURS / n_days,
-        "over_supply_ph_per_day": error.clip(lower=0).sum() * BLOCK_HOURS / n_days,
+        "under_supply_ph_per_day": (-error).clip(lower=0).sum() * hours / n_days,
+        "over_supply_ph_per_day": error.clip(lower=0).sum() * hours / n_days,
         "blocks_scored": int(both.sum()),
     })
 

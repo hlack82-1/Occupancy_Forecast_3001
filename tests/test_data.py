@@ -191,3 +191,11 @@ def test_audit_counts_zero_blips():
         ("2024-05-01 09:20:00", 0),
     ])
     assert audit_events(events)["zero_blips_under_1min"] == 1
+
+
+def test_zero_overnight_only_clears_night_blocks():
+    from occupancy.data import zero_overnight
+    index = pd.date_range("2024-05-01", periods=96, freq="15min", tz=LOCAL_TZ)
+    grid = zero_overnight(pd.Series(2.0, index=index))
+    assert (grid[grid.index.hour.isin([1, 2, 3, 4])] == 0).all()
+    assert (grid[grid.index.hour.isin([0, 5, 12, 23])] == 2).all()
