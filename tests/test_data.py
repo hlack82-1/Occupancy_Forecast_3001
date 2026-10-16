@@ -199,3 +199,34 @@ def test_zero_overnight_only_clears_night_blocks():
     grid = zero_overnight(pd.Series(2.0, index=index))
     assert (grid[grid.index.hour.isin([1, 2, 3, 4])] == 0).all()
     assert (grid[grid.index.hour.isin([0, 5, 12, 23])] == 2).all()
+
+
+def test_load_env_sensor_reads_json_and_skips_bad_rows(tmp_path):
+    import json
+
+    from occupancy.data import load_env_sensor
+
+    def row(sensor, t, co2):
+        return {"sensorid": sensor, "jsondata": json.dumps([
+            {"values": [{"time": t, "value": co2}], "variable": {"name": "Carbon dioxide"}},
+            {"values": [{"time": t, "value": 21.5}], "variable": {"name": "Temperature"}},
+        ])}
+
+    rows = [
+        row("A", 1714518000, 450),
+        row("A", 1714518000, 450),          # exact duplicate
+        row("A", 1714518600, 500),
+        row("B", 1714518000, 999),          # other sensor
+        {"sensorid": "A", "jsondata": "not json"},
+        {"sensorid": "A", "jsondata": json.dumps([
+            {"values": [{"time": 1714519200}], "variable": {"name": "Carbon dioxide"}}])},  # no value
+    ]
+    path = tmp_path / "env.csv"
+    pd.DataFrame(rows).to_csv(path, index=False)
+
+    co2 = load_env_sensor(path, "A")
+    assert list(co2) == [450.0, 500.0]
+    assert str(co2.index.tz) == LOCAL_TZ
+    assert co2.index[0].hour == 9  # 1714518000 = 9:00am Melbourne (UTC+10)
+    with pytest.raises(ValueError):
+        load_env_sensor(path, "A", variable="Humidity")

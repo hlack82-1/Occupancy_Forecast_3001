@@ -1,0 +1,10 @@
+,value
+overlap_start,2024-03-04 00:00:00+11:00
+overlap_end,2024-06-14 03:00:00+10:00
+overlap_hours,2453
+overlap_days,103
+corr_weekday_hourly_profile,0.9047058995188184
+corr_daily_mean,0.580945372062481
+corr_hourly_lag0h,0.47152003779977714
+corr_hourly_lag1h,0.48787434671266827
+corr_hourly_lag2h,0.4724345794035438

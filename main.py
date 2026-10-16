@@ -21,6 +21,10 @@ Each stage is added here as it is built. Outputs:
   (both model tables include the monthly-retrained versions)
 - ``reports/sensitivity_results.csv``: how the results change when each
   cleaning assumption is changed
+- ``reports/airflow_results.csv``: what each forecast would mean for
+  fresh-air supply (needs ``LITRES_PER_PERSON`` set below)
+- ``reports/co2_crosscheck.csv``: correlation between G.25 occupancy and CO2
+  measured in room G.38
 """
 
 import argparse
@@ -30,15 +34,17 @@ from pathlib import Path
 import pandas as pd
 
 from occupancy.data import (
+    CO2_SENSOR_G38,
     FLOORSPACES,
     audit_events,
     drop_partial_days,
+    load_env_sensor,
     load_occupancy_events,
     remove_duplicates,
     to_regular_grid,
     zero_overnight,
 )
-from occupancy.evaluate import score_table
+from occupancy.evaluate import airflow_summary, co2_crosscheck, score_table
 from occupancy.features import PERIODS, make_features, split_by_date
 from occupancy.models import (
     CANDIDATES,
@@ -53,6 +59,7 @@ from occupancy.models import (
 )
 
 RAW_OCCUPANCY = Path("data/raw/5occupancySensor_MayToDec2024_9MRows.csv")
+RAW_ENVIRONMENT = Path("data/raw/5EnvSensor_MayToDec2024_180kRows.csv")
 PROCESSED = Path("data/processed")
 REPORTS = Path("reports")
 
@@ -62,6 +69,12 @@ DROPOUT_LIMIT = "1h"    # longest a non-zero reading is trusted without a new on
 AGG = "mean"            # time-weighted average headcount per block
 TEST_START = "2025-03-03"  # train on the first 12 months, test on the rest
 VALIDATION_START = "2024-09-02"  # last 6 months of the training year pick settings
+
+#: Minimum outdoor-air rate in L/s per person for this type of space, from
+#: AS 1668.2. TODO (Harper): look up the value for G.25 (a makerspace /
+#: workshop) in AS 1668.2 via the Monash library, enter it here and cite it in
+#: the report. Left as None, the airflow stage is skipped.
+LITRES_PER_PERSON = 10
 
 
 def build_clean_series():
@@ -193,7 +206,7 @@ def run_models(table, train, test, chosen, quick=False):
 
     print("\nAll methods on the test period:")
     print(results.round(3).drop(columns="blocks_scored").to_string())
-    return results
+    return forecasts
 
 
 #: Cleaning assumptions to vary, one at a time, from the main settings.
@@ -250,6 +263,43 @@ def run_sensitivity(events):
     return results
 
 
+def run_airflow(test, forecasts):
+    """Stage 5: convert every forecast into fresh-air terms (L/s and m3/day).
+
+    Skipped if ``LITRES_PER_PERSON`` hasn't been set.
+    """
+    if LITRES_PER_PERSON is None:
+        print("\nAirflow stage skipped: set LITRES_PER_PERSON at the top of main.py "
+              "(AS 1668.2 rate for this space).")
+        return None
+    common = test["headcount"].notna()
+    for forecast in forecasts.values():
+        common &= forecast.notna()
+    rows = {name: airflow_summary(test["headcount"][common], f[common], LITRES_PER_PERSON)
+            for name, f in forecasts.items()}
+    results = pd.DataFrame(rows).T
+    results["litres_per_person"] = LITRES_PER_PERSON
+    results.to_csv(REPORTS / "airflow_results.csv")
+    print(f"\nAirflow on the test period ({LITRES_PER_PERSON} L/s per person):")
+    print(results.drop(columns="litres_per_person").round(2).to_string())
+    return results
+
+
+def run_co2_crosscheck(series):
+    """Stage 6: independent check of the occupancy data against CO2.
+
+    CO2 sensor 6012002000869 is in room G.38 (building 60), not G.25, and only
+    covers Feb to Jun 2024. So this tests whether the building's rhythm in
+    the occupancy data is real, not G.25's exact counts.
+    """
+    co2 = load_env_sensor(RAW_ENVIRONMENT, CO2_SENSOR_G38)
+    result = co2_crosscheck(series, co2)
+    result.to_csv(REPORTS / "co2_crosscheck.csv", header=["value"])
+    print("\nCO2 cross-check (G.25 occupancy vs CO2 in G.38):")
+    print(result.to_string())
+    return result
+
+
 def main(quick=False):
     """Run each pipeline stage in order and print a short summary."""
     PROCESSED.mkdir(parents=True, exist_ok=True)
@@ -257,9 +307,11 @@ def main(quick=False):
     events, series = build_clean_series()
     table, train, test = run_baselines(series)
     chosen = choose_settings(train)
-    run_models(table, train, test, chosen, quick=quick)
+    forecasts = run_models(table, train, test, chosen, quick=quick)
     print("\nSensitivity checks:")
     run_sensitivity(events)
+    run_airflow(test, forecasts)
+    run_co2_crosscheck(series)
 
 
 if __name__ == "__main__":

@@ -339,3 +339,78 @@ def zero_overnight(series, start_hour=1, end_hour=5):
     hours = series.index.hour
     night = (hours >= start_hour) & (hours < end_hour)
     return series.where(~night, 0.0)
+
+
+# ---------------------------------------------------------------------------
+# Environmental sensors (used only for the CO2 cross-check)
+# ---------------------------------------------------------------------------
+
+#: CO2 sensor with usable data. Location sheet: building 60, room G.38
+#: (Compactus_upper), a different room from G.25. Data Feb to Jun 2024.
+CO2_SENSOR_G38 = "6012002000869"
+
+
+def load_env_sensor(csv_path, sensor_id, variable="Carbon dioxide", chunksize=50_000):
+    """Read one variable from one environmental sensor.
+
+    Each row of the environmental CSV stores its readings as a JSON list,
+    for example ``[{"values": [{"time": 1702273965, "value": 603}],
+    "variable": {"name": "Carbon dioxide", "unit": "ppm"}}, ...]``. Times
+    are Unix seconds (UTC). Many rows are exact duplicates, and some JSON
+    entries have no value, so those are skipped.
+
+    Parameters
+    ----------
+    csv_path : str or pathlib.Path
+        Path to ``5EnvSensor_MayToDec2024_180kRows.csv``.
+    sensor_id : str
+        Sensor ID, e.g. ``CO2_SENSOR_G38``.
+    variable : str, optional
+        Variable name inside the JSON, e.g. ``"Carbon dioxide"`` (ppm) or
+        ``"Temperature"`` (deg C).
+    chunksize : int, optional
+        Rows read at a time.
+
+    Returns
+    -------
+    pandas.Series
+        One value per reading time, sorted, tz-aware local index, duplicates
+        removed. Named after ``variable``.
+
+    Raises
+    ------
+    FileNotFoundError
+        If ``csv_path`` does not exist.
+    ValueError
+        If no readings of ``variable`` are found for ``sensor_id``.
+    """
+    import json  # only needed here
+
+    path = Path(csv_path)
+    if not path.exists():
+        raise FileNotFoundError(f"Environmental file not found: {path}")
+
+    times, values = [], []
+    reader = pd.read_csv(path, usecols=["sensorid", "jsondata"],
+                         dtype=str, chunksize=chunksize)
+    for chunk in reader:
+        for text in chunk.loc[chunk["sensorid"] == sensor_id, "jsondata"]:
+            try:
+                readings = json.loads(text)
+            except (TypeError, ValueError):
+                continue  # broken JSON row: skip it
+            for item in readings:
+                if item.get("variable", {}).get("name") != variable:
+                    continue
+                for reading in item.get("values", []):
+                    if "value" in reading and "time" in reading:
+                        times.append(reading["time"])
+                        values.append(float(reading["value"]))
+
+    if not times:
+        raise ValueError(f"No '{variable}' readings for sensor {sensor_id}")
+    index = pd.to_datetime(times, unit="s", utc=True).tz_convert(LOCAL_TZ)
+    series = pd.Series(values, index=index, name=variable)
+    series = series[~series.index.duplicated(keep="first")].sort_index()
+    series.index.name = "time"
+    return series

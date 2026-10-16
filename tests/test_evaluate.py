@@ -58,3 +58,48 @@ def test_supply_uses_block_length_from_data():
     forecast = pd.Series([1.0, 2.0, 2.0], index=index)
     # 1 person short for one 1-hour block = 1 person-hour
     assert score(actual, forecast)["under_supply_ph_per_day"] == pytest.approx(1.0)
+
+
+# ---------------------------------------------------------------------------
+# Airflow and CO2 cross-check
+# ---------------------------------------------------------------------------
+from occupancy.evaluate import airflow_summary, co2_crosscheck, headcount_to_airflow  # noqa: E402
+
+
+def test_headcount_to_airflow():
+    assert headcount_to_airflow(3, 10.0) == 30.0
+    with pytest.raises(ValueError):
+        headcount_to_airflow(3, 0)
+    with pytest.raises(ValueError):
+        headcount_to_airflow(3, None)
+
+
+def test_airflow_summary_known_values():
+    # One day of 15-minute blocks: 2 people for 4 blocks, forecast 1 person.
+    actual = make([2, 2, 2, 2])
+    forecast = make([1, 1, 1, 1])
+    s = airflow_summary(actual, forecast, litres_per_person=10.0)
+    assert s["mean_required_ls"] == pytest.approx(20.0)
+    assert s["peak_required_ls"] == pytest.approx(20.0)
+    # short 10 L/s for 4 x 900 s = 36,000 L = 36 m3 in one day
+    assert s["under_supply_m3_per_day"] == pytest.approx(36.0)
+    assert s["over_supply_m3_per_day"] == 0
+    assert s["blocks_under_by_1_person"] == 1.0
+
+
+def test_co2_crosscheck_finds_matching_pattern():
+    index = pd.date_range("2024-05-06", periods=14 * 96, freq="15min", tz="Australia/Melbourne")
+    busy = (index.dayofweek < 5) & (index.hour >= 9) & (index.hour < 17)
+    headcount = pd.Series(np.where(busy, 3.0, 0.0), index=index)
+    co2 = pd.Series(420 + 30 * headcount.to_numpy(), index=index)  # CO2 follows people
+    s = co2_crosscheck(headcount, co2)
+    assert s["corr_weekday_hourly_profile"] == pytest.approx(1.0)
+    assert s["corr_hourly_lag0h"] == pytest.approx(1.0)
+    assert s["overlap_days"] == 14
+
+
+def test_co2_crosscheck_needs_overlap():
+    a = make([1, 2, 3], start="2024-05-06 09:00")
+    b = make([400, 410, 420], start="2025-05-06 09:00")
+    with pytest.raises(ValueError):
+        co2_crosscheck(a, b)
