@@ -1,0 +1,23 @@
+         74863 function calls (73857 primitive calls) in 13.320 seconds
+
+   Ordered by: cumulative time
+   List reduced from 804 to 15 due to restriction <15>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1    0.005    0.005   13.320   13.320 C:\Users\harpe\dev\Occupancy_Forecast_3001\occupancy\data.py:37(load_occupancy_events)
+       11    0.000    0.000    8.248    0.750 C:\Users\harpe\anaconda3\envs\mma3001\Lib\site-packages\pandas\io\parsers\readers.py:1867(__next__)
+       11    0.000    0.000    8.248    0.750 C:\Users\harpe\anaconda3\envs\mma3001\Lib\site-packages\pandas\io\parsers\readers.py:2005(get_chunk)
+       11    0.000    0.000    8.248    0.750 C:\Users\harpe\anaconda3\envs\mma3001\Lib\site-packages\pandas\io\parsers\readers.py:1934(read)
+       11    6.607    0.601    8.238    0.749 C:\Users\harpe\anaconda3\envs\mma3001\Lib\site-packages\pandas\io\parsers\c_parser_wrapper.py:226(read)
+        1    0.017    0.017    4.290    4.290 C:\Users\harpe\anaconda3\envs\mma3001\Lib\site-packages\pandas\core\tools\datetimes.py:687(to_datetime)
+        1    0.000    0.000    4.272    4.272 C:\Users\harpe\anaconda3\envs\mma3001\Lib\site-packages\pandas\core\tools\datetimes.py:321(_convert_listlike_datetimes)
+        1    4.203    4.203    4.205    4.205 C:\Users\harpe\anaconda3\envs\mma3001\Lib\site-packages\pandas\core\tools\datetimes.py:459(_array_strptime_with_fallback)
+      464    1.511    0.003    1.523    0.003 C:\Users\harpe\anaconda3\envs\mma3001\Lib\site-packages\pandas\core\arrays\string_arrow.py:195(_from_sequence)
+      438    0.001    0.000    1.523    0.003 C:\Users\harpe\anaconda3\envs\mma3001\Lib\site-packages\pandas\core\arrays\string_arrow.py:245(_from_sequence_of_strings)
+        3    0.000    0.000    0.356    0.119 C:\Users\harpe\anaconda3\envs\mma3001\Lib\site-packages\pandas\core\arrays\categorical.py:387(__init__)
+        1    0.001    0.001    0.331    0.331 C:\Users\harpe\anaconda3\envs\mma3001\Lib\site-packages\pandas\core\frame.py:8130(sort_values)
+       12    0.000    0.000    0.279    0.023 C:\Users\harpe\anaconda3\envs\mma3001\Lib\site-packages\pandas\core\internals\managers.py:1065(take)
+    63/61    0.001    0.000    0.273    0.004 C:\Users\harpe\anaconda3\envs\mma3001\Lib\site-packages\pandas\core\array_algos\take.py:57(take_nd)
+       12    0.000    0.000    0.270    0.023 C:\Users\harpe\anaconda3\envs\mma3001\Lib\site-packages\pandas\core\internals\managers.py:813(reindex_indexer)
+
+
