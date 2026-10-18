@@ -41,38 +41,36 @@ PUBLIC_HOLIDAYS = {
     date(2026, 12, 26), date(2026, 12, 28),
 }
 
-#: Monash Clayton standard semesters as (first day, last day, period name).
-#: Any date not covered is a "break" (summer, winter, between semesters).
+#: Monash Clayton standard semesters (S1-01 and S2-01) as
+#: (first day, last day, period name). Any date not covered is a "break"
+#: (summer, winter, between semesters). Weekends next to a period take the
+#: label of the period they sit between.
 #: Sources:
-#:   2025 S1, 2025 S2 start, 2026 S1: Monash "Important dates" / study abroad
-#:     key dates pages (official).
-#:   2025 S2 mid-semester break: Harper's own recollection (29 Sep to 3 Oct).
-#:   2024, and 2025 S2 end/exams: ESTIMATED from the same pattern
-#:     (13 weeks of teaching incl. a 1-week break, 1 week swot vac,
-#:     about 3 weeks of exams). Mid-semester breaks for 2024 assumed to
-#:     follow the 2025 pattern (Easter week in S1, week after the AFL Grand
-#:     Final in S2). Flagged as an assumption in the report.
+#:   2024 and 2025: Monash University "Important dates" academic calendars
+#:     for 2024 and 2025 (official; teaching, mid-semester break, swot vac
+#:     and final assessment dates).
+#:   2026 S1: Monash study abroad "Key dates" page (official).
 ACADEMIC_PERIODS = [
-    # 2024 semester 1 (estimated)
+    # 2024 semester 1 (official)
     (date(2024, 2, 26), date(2024, 3, 31), "teaching"),
     (date(2024, 4, 1), date(2024, 4, 5), "midsem_break"),
     (date(2024, 4, 6), date(2024, 5, 24), "teaching"),
     (date(2024, 5, 25), date(2024, 6, 21), "swot_exams"),
-    # 2024 semester 2 (estimated)
-    (date(2024, 7, 22), date(2024, 9, 29), "teaching"),
-    (date(2024, 9, 30), date(2024, 10, 4), "midsem_break"),
-    (date(2024, 10, 5), date(2024, 10, 18), "teaching"),
+    # 2024 semester 2 (official)
+    (date(2024, 7, 22), date(2024, 9, 22), "teaching"),
+    (date(2024, 9, 23), date(2024, 9, 27), "midsem_break"),
+    (date(2024, 9, 28), date(2024, 10, 18), "teaching"),
     (date(2024, 10, 19), date(2024, 11, 15), "swot_exams"),
     # 2025 semester 1 (official)
     (date(2025, 3, 3), date(2025, 4, 20), "teaching"),
     (date(2025, 4, 21), date(2025, 4, 25), "midsem_break"),
     (date(2025, 4, 26), date(2025, 5, 30), "teaching"),
     (date(2025, 5, 31), date(2025, 6, 27), "swot_exams"),
-    # 2025 semester 2 (start official; break from Harper; end estimated)
+    # 2025 semester 2 (official)
     (date(2025, 7, 28), date(2025, 9, 28), "teaching"),
     (date(2025, 9, 29), date(2025, 10, 3), "midsem_break"),
     (date(2025, 10, 4), date(2025, 10, 24), "teaching"),
-    (date(2025, 10, 25), date(2025, 11, 21), "swot_exams"),
+    (date(2025, 10, 25), date(2025, 11, 19), "swot_exams"),
     # 2026 semester 1 (official)
     (date(2026, 3, 2), date(2026, 4, 5), "teaching"),
     (date(2026, 4, 6), date(2026, 4, 10), "midsem_break"),

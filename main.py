@@ -58,6 +58,8 @@ from occupancy.models import (
     forecast_rolling_profile,
 )
 
+
+
 RAW_OCCUPANCY = Path("data/raw/5occupancySensor_MayToDec2024_9MRows.csv")
 RAW_ENVIRONMENT = Path("data/raw/5EnvSensor_MayToDec2024_180kRows.csv")
 PROCESSED = Path("data/processed")
@@ -70,10 +72,12 @@ AGG = "mean"            # time-weighted average headcount per block
 TEST_START = "2025-03-03"  # train on the first 12 months, test on the rest
 VALIDATION_START = "2024-09-02"  # last 6 months of the training year pick settings
 
-#: Minimum outdoor-air rate in L/s per person for this type of space, from
-#: AS 1668.2. TODO (Harper): look up the value for G.25 (a makerspace /
-#: workshop) in AS 1668.2 via the Monash library, enter it here and cite it in
-#: the report. Left as None, the airflow stage is skipped.
+
+#: Assumed minimum outdoor-air rate in L/s per person. AS 1668.2:2024 sets the
+#: rate by type of space; the value for a makerspace could not be confirmed,
+#: so 10 is an assumption. Airflow results scale in proportion to it, so the
+#: ranking of methods does not depend on it. Set to None to skip the airflow
+#: stage.
 LITRES_PER_PERSON = 10
 
 

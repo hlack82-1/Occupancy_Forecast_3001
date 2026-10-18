@@ -19,10 +19,10 @@ Tested day-ahead on 13.5 months the models never saw (3 Mar 2025 to 21 Apr 2026)
 |---|---|---|
 | Always empty (sanity check) | 0.508 | 0.974 |
 | Rolling 4-week profile (best baseline) | 0.491 | 0.775 |
-| Linear regression, trained once | 0.502 | 0.738 |
-| Neural network, trained once | 0.546 | 0.943 |
+| Linear regression, trained once | 0.504 | 0.739 |
+| Neural network, trained once | 0.552 | 0.952 |
 | **Linear regression, retrained monthly (chosen)** | **0.478** | **0.718** |
-| Neural network, retrained monthly | 0.491 | 0.806 |
+| Neural network, retrained monthly | 0.488 | 0.806 |
 
 Use of the room dropped a lot after 2024, so models trained once go out of date. Retraining every month fixes most of that. The best model beats the best simple baseline by about 3% on MAE and 7% on RMSE: a small gain, because the room is empty much of the time. All numbers are in `reports/`, and the figures are made by the notebooks.
 
@@ -76,7 +76,7 @@ Run everything from the repository root with the `mma3001` environment active.
 | `python benchmark.py` | Speed and memory tests. Run `main.py` first | a few min |
 | `pytest` | Runs the 49 unit tests (no raw data needed) | a few seconds |
 
-The airflow results use a minimum outdoor-air rate of 10 L/s per person, set as `LITRES_PER_PERSON` at the top of `main.py`.
+The airflow results assume a minimum outdoor-air rate of 10 L/s per person, set as `LITRES_PER_PERSON` at the top of `main.py`. Airflow scales in proportion to this rate, so the ranking of methods does not depend on it.
 
 ### Notebooks
 
@@ -114,7 +114,7 @@ pdoc -d numpy occupancy -o docs
 - The data is Dataset 2 (Monash Smart Infrastructure occupancy and environmental data) provided by the MMA3001 teaching team. It is not included here; see `data/README.md`.
 - Headcounts detected overnight are treated as real.
 - A non-zero reading with no update for over 1 hour is treated as a sensor dropout (the room is assumed empty after 1 hour).
-- 2024 semester dates and the end of semester 2 2025 are estimated from the pattern of official dates.
+- Semester periods (teaching, mid-semester break, swot vac and exams) use Monash's official academic calendars for 2024 and 2025 and the key dates page for 2026.
 
 ## Use of AI
 

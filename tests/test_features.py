@@ -68,6 +68,11 @@ def test_academic_period_examples():
     assert academic_period(date(2025, 3, 3)) == "teaching"
     assert academic_period(date(2025, 6, 10)) == "swot_exams"
     assert academic_period(date(2025, 1, 15)) == "break"
+    # Official 2024 S2 dates: mid-semester break 23 to 27 Sep 2024
+    assert academic_period(date(2024, 9, 23)) == "midsem_break"
+    assert academic_period(date(2024, 9, 30)) == "teaching"
+    # 2025 S2 final assessments end Wed 19 Nov 2025
+    assert academic_period(date(2025, 11, 20)) == "break"
 
 
 def test_split_by_date():
